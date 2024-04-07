@@ -1,0 +1,705 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Ibramsou <kasobanboui@gmail.com>
+Date: Sun, 7 Apr 2024 14:33:24 +0200
+Subject: [PATCH] Multi Arena System
+
+
+diff --git a/src/main/java/fr/skylodia/craftbukkit/CraftSkylodiaAPI.java b/src/main/java/fr/skylodia/craftbukkit/CraftSkylodiaAPI.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..3a71d4e6ba7979cc5c70590b16c6d9fe428b0929
+--- /dev/null
++++ b/src/main/java/fr/skylodia/craftbukkit/CraftSkylodiaAPI.java
+@@ -0,0 +1,31 @@
++//
++// Source code recreated from a .class file by IntelliJ IDEA
++// (powered by FernFlower decompiler)
++//
++
++package fr.skylodia.craftbukkit;
++
++import fr.skylodia.bukkit.api.SkylodiaBukkitAPI;
++import fr.skylodia.bukkit.api.hidden.HiddenPredicate;
++import org.bukkit.entity.Player;
++import org.bukkit.plugin.Plugin;
++
++public class CraftSkylodiaAPI implements SkylodiaBukkitAPI {
++    private static final HiddenPredicate HIDE_EVERYONE = (player, viewer) -> false;
++
++    public void setMultiArena(Plugin plugin, Player player) {
++        this.setMultiArena(plugin, player, HIDE_EVERYONE);
++    }
++
++    public void setMultiArena(Plugin plugin, Player player, HiddenPredicate hiddenPredicate) {
++        player.setMultiArena(plugin, hiddenPredicate);
++    }
++
++    public void removeMultiArena(Player player) {
++        player.removeMultiArena();
++    }
++
++    public boolean hasMultiArena(Player player) {
++        return player.hasMultiArena();
++    }
++}
+diff --git a/src/main/java/fr/skylodia/craftbukkit/HiddenPlayer.java b/src/main/java/fr/skylodia/craftbukkit/HiddenPlayer.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..c82e6396ebd502c1dad7e2c0eb6e12a8a589f796
+--- /dev/null
++++ b/src/main/java/fr/skylodia/craftbukkit/HiddenPlayer.java
+@@ -0,0 +1,53 @@
++package fr.skylodia.craftbukkit;
++
++import fr.skylodia.bukkit.api.hidden.HiddenPredicate;
++import java.util.HashSet;
++import java.util.Iterator;
++import java.util.Set;
++import net.minecraft.server.MinecraftServer;
++import net.minecraft.server.level.ServerPlayer;
++import org.bukkit.entity.Player;
++import org.bukkit.plugin.Plugin;
++
++public class HiddenPlayer {
++    private final Plugin plugin;
++    private final ServerPlayer owner;
++    private final HiddenPredicate predicate;
++    private final Set<Player> notViewingPlayers = new HashSet<>();
++
++    public HiddenPlayer(Plugin plugin, ServerPlayer owner, HiddenPredicate predicate) {
++        this.plugin = plugin;
++        this.owner = owner;
++        this.predicate = predicate;
++        for (ServerPlayer player : MinecraftServer.getServer().getPlayerList().players) {
++            if (player != owner && !this.predicate.shouldSee(this.owner.getBukkitEntity(), player.getBukkitEntity())) {
++                player.getBukkitEntity().hidePlayer(this.plugin, this.owner.getBukkitEntity());
++                this.notViewingPlayers.add(player.getBukkitEntity());
++            }
++        }
++
++    }
++
++    public void playerLeft(ServerPlayer left) {
++        this.notViewingPlayers.remove(left.getBukkitEntity());
++    }
++
++    public void playerJoined(ServerPlayer joining) {
++        if (!this.predicate.shouldSee(this.owner.getBukkitEntity(), joining.getBukkitEntity())) {
++            this.notViewingPlayers.add(joining.getBukkitEntity());
++            joining.getBukkitEntity().hidePlayer(this.plugin, this.owner.getBukkitEntity());
++        }
++    }
++
++    public Set<Player> getNotViewingPlayers() {
++        return this.notViewingPlayers;
++    }
++
++    public ServerPlayer getOwner() {
++        return this.owner;
++    }
++
++    public Plugin getPlugin() {
++        return this.plugin;
++    }
++}
+diff --git a/src/main/java/fr/skylodia/craftbukkit/HiddenUtils.java b/src/main/java/fr/skylodia/craftbukkit/HiddenUtils.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..3339e9b78347b63fff48307067d3a1d0b6887766
+--- /dev/null
++++ b/src/main/java/fr/skylodia/craftbukkit/HiddenUtils.java
+@@ -0,0 +1,50 @@
++package fr.skylodia.craftbukkit;
++
++import javax.annotation.Nullable;
++import net.minecraft.server.level.ServerPlayer;
++import net.minecraft.world.entity.Entity;
++import net.minecraft.world.level.Level;
++import org.bukkit.craftbukkit.entity.CraftPlayer;
++import org.bukkit.entity.Player;
++
++public class HiddenUtils {
++
++    public static void revealHiddenPlayer(HiddenPlayer hiddenPlayer) {
++        for (Player notViewingPlayer : hiddenPlayer.getNotViewingPlayers()) {
++            notViewingPlayer.showPlayer(hiddenPlayer.getPlugin(), notViewingPlayer);
++        }
++    }
++
++    public static void hideEntities(Entity entity, net.minecraft.world.entity.player.Player player) {
++        player.getHiddenPlayer().ifPresent((hiddenPlayer) -> {
++            for (Player bukkitPlayer : hiddenPlayer.getNotViewingPlayers()) {
++                ((CraftPlayer) bukkitPlayer).hideEntity0(null, entity.getBukkitEntity());
++            }
++        });
++    }
++
++    public static boolean addFreshEntity(Level world, Entity entity, @Nullable net.minecraft.world.entity.player.Player owner) {
++        boolean added = world.addFreshEntity(entity);
++        if (added && owner != null) {
++            entity.setMultiArenaOwner(owner);
++            hideEntities(entity, owner);
++        }
++
++        return added;
++    }
++
++    public static boolean isHidden(Entity entity, net.minecraft.world.entity.player.Player player) {
++        if ((entity.hasMultiArenaOwner() || player.hasMultiArena()) && player instanceof ServerPlayer serverPlayer) {
++            return !serverPlayer.getBukkitEntity().canSee(entity.getBukkitEntity());
++        }
++
++        return false;
++    }
++
++    public static boolean hasMultiArena(Entity entity) {
++        if (entity instanceof ServerPlayer player) {
++            return player.getHiddenPlayer().isPresent();
++        }
++        return false;
++    }
++}
+diff --git a/src/main/java/net/minecraft/server/level/ServerPlayer.java b/src/main/java/net/minecraft/server/level/ServerPlayer.java
+index 36b7686fdfeaab13cb1be9610ddc76fc70f6f6e5..e784e7d6930bcbd7ec8c7963c556a540c5fc0953 100644
+--- a/src/main/java/net/minecraft/server/level/ServerPlayer.java
++++ b/src/main/java/net/minecraft/server/level/ServerPlayer.java
+@@ -17,6 +17,8 @@ import java.util.OptionalInt;
+ import java.util.Set;
+ import java.util.stream.Collectors;
+ import javax.annotation.Nullable;
++import fr.skylodia.craftbukkit.HiddenPlayer;
++import fr.skylodia.craftbukkit.HiddenUtils;
+ import net.minecraft.BlockUtil;
+ import net.minecraft.ChatFormatting;
+ import net.minecraft.CrashReport;
+@@ -2570,7 +2572,8 @@ public class ServerPlayer extends Player {
+         if (entityitem == null) {
+             return null;
+         } else {
+-            this.level().addFreshEntity(entityitem);
++            HiddenUtils.addFreshEntity(this.level(), entityitem, this); // Skylodia - Multi Arena
++            //this.level().addFreshEntity(entityitem);
+             ItemStack itemstack1 = entityitem.getItem();
+ 
+             if (retainOwnership) {
+diff --git a/src/main/java/net/minecraft/server/players/PlayerList.java b/src/main/java/net/minecraft/server/players/PlayerList.java
+index ac1e0c66f167218306504db6037cc1d6509072a0..f950756dd5c6ac82103564e71df7328418d967d1 100644
+--- a/src/main/java/net/minecraft/server/players/PlayerList.java
++++ b/src/main/java/net/minecraft/server/players/PlayerList.java
+@@ -15,6 +15,7 @@ import java.text.SimpleDateFormat;
+ import java.time.Instant;
+ import java.util.Collection;
+ import java.util.EnumSet;
++import java.util.HashSet;
+ import java.util.Iterator;
+ import java.util.List;
+ import java.util.Map;
+@@ -179,6 +180,8 @@ public abstract class PlayerList {
+     }
+     abstract public void loadAndSaveFiles(); // Paper - fix converting txt to json file; moved from DedicatedPlayerList constructor
+ 
++    public static final Set<net.minecraft.world.entity.player.Player> multiArenaPlayers = new HashSet<>(); // Skylodia - Multi arena
++
+     public void placeNewPlayer(Connection connection, ServerPlayer player, CommonListenerCookie clientData) {
+         player.isRealPlayer = true; // Paper
+         player.loginTime = System.currentTimeMillis(); // Paper - Replace OfflinePlayer#getLastPlayed
+@@ -477,6 +480,8 @@ public abstract class PlayerList {
+         // Paper start - Fire PlayerJoinEvent when Player is actually ready
+     }
+     public void onPlayerJoinFinish(ServerPlayer player, ServerLevel worldserver1, String s1) {
++        multiArenaPlayers.forEach((hidden) -> hidden.getHiddenPlayer().ifPresent((hiddenPlayer) ->
++            hiddenPlayer.playerJoined(player))); // Skylodia Multi Arena
+         // Paper end - Fire PlayerJoinEvent when Player is actually ready
+         player.initInventoryMenu();
+         // CraftBukkit - Moved from above, added world
+@@ -611,6 +616,8 @@ public abstract class PlayerList {
+             entityplayer.closeContainer(org.bukkit.event.inventory.InventoryCloseEvent.Reason.DISCONNECT); // Paper - Inventory close reason
+         }
+ 
++        multiArenaPlayers.forEach((player) -> player.getHiddenPlayer().ifPresent((hiddenPlayer) -> hiddenPlayer.playerLeft(entityplayer))); // Skylodia - Multi Arena
++
+         PlayerQuitEvent playerQuitEvent = new PlayerQuitEvent(entityplayer.getBukkitEntity(), net.kyori.adventure.text.Component.translatable("multiplayer.player.left", net.kyori.adventure.text.format.NamedTextColor.YELLOW, io.papermc.paper.configuration.GlobalConfiguration.get().messages.useDisplayNameInQuitMessage ? entityplayer.getBukkitEntity().displayName() : io.papermc.paper.adventure.PaperAdventure.asAdventure(entityplayer.getDisplayName())), entityplayer.quitReason); // Paper - Adventure & Add API for quit reason
+         this.cserver.getPluginManager().callEvent(playerQuitEvent);
+         entityplayer.getBukkitEntity().disconnect(playerQuitEvent.getQuitMessage());
+diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
+index 1922bfe7957f89a69647b7f3d8cd9ec14e43ce7d..9af88d8d2ade7a7fb9748ba2a3966baef6a88f9e 100644
+--- a/src/main/java/net/minecraft/world/entity/Entity.java
++++ b/src/main/java/net/minecraft/world/entity/Entity.java
+@@ -160,6 +160,18 @@ import org.bukkit.plugin.PluginManager;
+ // CraftBukkit end
+ 
+ public abstract class Entity implements Nameable, EntityAccess, CommandSource, ScoreHolder {
++
++    @Nullable
++    private Player multiArenaOwner;
++
++    public void setMultiArenaOwner(Player multiArenaOwner) {
++        this.multiArenaOwner = multiArenaOwner;
++    }
++
++    public boolean hasMultiArenaOwner() {
++        return this.multiArenaOwner != null && this.multiArenaOwner.hasMultiArena();
++    }
++
+     public static javax.script.ScriptEngine scriptEngine = new javax.script.ScriptEngineManager().getEngineByName("rhino"); // Purpur
+     // CraftBukkit start
+     private static final int CURRENT_LEVEL = 2;
+diff --git a/src/main/java/net/minecraft/world/entity/item/ItemEntity.java b/src/main/java/net/minecraft/world/entity/item/ItemEntity.java
+index 3cac817351a149935df75ef23d9f9417f6502016..ad8ade066804d7a68e517ee1363c68a13b615fa8 100644
+--- a/src/main/java/net/minecraft/world/entity/item/ItemEntity.java
++++ b/src/main/java/net/minecraft/world/entity/item/ItemEntity.java
+@@ -5,6 +5,7 @@ import java.util.List;
+ import java.util.Objects;
+ import java.util.UUID;
+ import javax.annotation.Nullable;
++import fr.skylodia.craftbukkit.HiddenUtils;
+ import net.minecraft.tags.DamageTypeTags;
+ import net.minecraft.tags.FluidTags;
+ import net.minecraft.tags.ItemTags;
+@@ -469,7 +470,7 @@ public class ItemEntity extends Entity implements TraceableEntity {
+ 
+     @Override
+     public void playerTouch(net.minecraft.world.entity.player.Player player) {
+-        if (!this.level().isClientSide) {
++        if (!this.level().isClientSide && !HiddenUtils.isHidden(this, player)) { // Skylodia - Multi Arena
+             ItemStack itemstack = this.getItem();
+             Item item = itemstack.getItem();
+             int i = itemstack.getCount();
+diff --git a/src/main/java/net/minecraft/world/entity/player/Player.java b/src/main/java/net/minecraft/world/entity/player/Player.java
+index 43199815ffe3d666577390b96187aa898ceb910e..b64c72ab73663620f7f7f01dd9d18dae7e94fcef 100644
+--- a/src/main/java/net/minecraft/world/entity/player/Player.java
++++ b/src/main/java/net/minecraft/world/entity/player/Player.java
+@@ -16,6 +16,8 @@ import java.util.Optional;
+ import java.util.OptionalInt;
+ import java.util.function.Predicate;
+ import javax.annotation.Nullable;
++import fr.skylodia.craftbukkit.HiddenPlayer;
++import fr.skylodia.craftbukkit.HiddenUtils;
+ import net.minecraft.Util;
+ import net.minecraft.advancements.CriteriaTriggers;
+ import net.minecraft.core.BlockPos;
+@@ -39,6 +41,7 @@ import net.minecraft.network.syncher.SynchedEntityData;
+ import net.minecraft.resources.ResourceLocation;
+ import net.minecraft.server.level.ServerLevel;
+ import net.minecraft.server.level.ServerPlayer;
++import net.minecraft.server.players.PlayerList;
+ import net.minecraft.sounds.SoundEvent;
+ import net.minecraft.sounds.SoundEvents;
+ import net.minecraft.sounds.SoundSource;
+@@ -217,6 +220,38 @@ public abstract class Player extends LivingEntity {
+     }
+     // Purpur end
+ 
++    // Skylodia start
++    @Nullable
++    private HiddenPlayer hiddenPlayer;
++
++    @Nullable
++    public Player getMultiArenaSafePlayer() {
++        return this.hiddenPlayer == null ? this : null;
++    }
++
++    public Optional<HiddenPlayer> getHiddenPlayer() {
++        return Optional.ofNullable(this.hiddenPlayer);
++    }
++
++    public void setMultiArena(HiddenPlayer hiddenPlayer) {
++        this.hiddenPlayer = hiddenPlayer;
++        PlayerList.multiArenaPlayers.add(this);
++    }
++
++    public void removeMultiArena(boolean disconnect) {
++        if (this.hiddenPlayer != null && !disconnect) {
++            HiddenUtils.revealHiddenPlayer(this.hiddenPlayer);
++        }
++
++        this.hiddenPlayer = null;
++        PlayerList.multiArenaPlayers.remove(this);
++    }
++
++    public boolean hasMultiArena() {
++        return this.hiddenPlayer != null;
++    }
++    // Skylodia End
++
+     public Player(Level world, BlockPos pos, float yaw, GameProfile gameProfile) {
+         super(EntityType.PLAYER, world);
+         this.lastItemInMainHand = ItemStack.EMPTY;
+@@ -671,6 +706,7 @@ public abstract class Player extends LivingEntity {
+     }
+ 
+     private void touch(Entity entity) {
++        if (HiddenUtils.isHidden(entity, this)) return; // Skylodia - Multi Arena
+         entity.playerTouch(this);
+     }
+ 
+@@ -838,6 +874,7 @@ public abstract class Player extends LivingEntity {
+             }
+             // Paper end
+ 
++            HiddenUtils.hideEntities(entityitem, this);
+             return entityitem;
+         }
+     }
+diff --git a/src/main/java/net/minecraft/world/entity/projectile/ThrownPotion.java b/src/main/java/net/minecraft/world/entity/projectile/ThrownPotion.java
+index 19af5552e36964996082226b4f77561d7deb99f6..86364954067b3ae50cad918addb10f0d07023f35 100644
+--- a/src/main/java/net/minecraft/world/entity/projectile/ThrownPotion.java
++++ b/src/main/java/net/minecraft/world/entity/projectile/ThrownPotion.java
+@@ -4,6 +4,7 @@ import java.util.Iterator;
+ import java.util.List;
+ import java.util.function.Predicate;
+ import javax.annotation.Nullable;
++import fr.skylodia.craftbukkit.HiddenUtils;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.Direction;
+ import net.minecraft.nbt.CompoundTag;
+@@ -126,7 +127,11 @@ public class ThrownPotion extends ThrowableItemProjectile implements ItemSupplie
+             if (showParticles) { // Paper - Fix potions splash events
+             int i = potionregistry.hasInstantEffects() ? 2007 : 2002;
+ 
+-            this.level().levelEvent(i, this.blockPosition(), PotionUtils.getColor(itemstack));
++            if (this.getOwner() instanceof Player player && player.hasMultiArena()) {
++                this.level().levelEvent(player, i, this.blockPosition(), PotionUtils.getColor(itemstack));
++            } else {
++                this.level().levelEvent(i, this.blockPosition(), PotionUtils.getColor(itemstack));
++            }
+             } // Paper - Fix potions splash events
+             this.discard(EntityRemoveEvent.Cause.HIT); // CraftBukkit - add Bukkit remove cause
+         }
+@@ -185,7 +190,7 @@ public class ThrownPotion extends ThrowableItemProjectile implements ItemSupplie
+         AABB axisalignedbb = this.getBoundingBox().inflate(4.0D, 2.0D, 4.0D);
+         List<net.minecraft.world.entity.LivingEntity> list1 = this.level().getEntitiesOfClass(net.minecraft.world.entity.LivingEntity.class, axisalignedbb);
+         Map<LivingEntity, Double> affected = new HashMap<LivingEntity, Double>(); // CraftBukkit
+-
++        boolean hasOwnerMultiArena = HiddenUtils.hasMultiArena(this.getOwner()); // Skylodia - Multi Arena
+         if (!list1.isEmpty()) {
+             Entity entity1 = this.getEffectSource();
+             Iterator iterator = list1.iterator();
+@@ -193,6 +198,10 @@ public class ThrownPotion extends ThrowableItemProjectile implements ItemSupplie
+             while (iterator.hasNext()) {
+                 net.minecraft.world.entity.LivingEntity entityliving = (net.minecraft.world.entity.LivingEntity) iterator.next();
+ 
++                if (hasOwnerMultiArena && HiddenUtils.hasMultiArena(entityliving) && (entityliving instanceof ServerPlayer serverPlayer) && !serverPlayer.getBukkitEntity().canSee(this.getBukkitEntity())) {
++                    continue;
++                }
++
+                 if (entityliving.isAffectedByPotions()) {
+                     double d0 = this.distanceToSqr((Entity) entityliving);
+ 
+diff --git a/src/main/java/net/minecraft/world/item/BowItem.java b/src/main/java/net/minecraft/world/item/BowItem.java
+index d45a2f49c82d00801578c34e5f5277fc5e82be87..c3f1d8d0d267ecb9bec0ab2aa1b7ba1c5fe971e9 100644
+--- a/src/main/java/net/minecraft/world/item/BowItem.java
++++ b/src/main/java/net/minecraft/world/item/BowItem.java
+@@ -1,6 +1,7 @@
+ package net.minecraft.world.item;
+ 
+ import java.util.function.Predicate;
++import fr.skylodia.craftbukkit.HiddenUtils;
+ import net.minecraft.sounds.SoundEvents;
+ import net.minecraft.sounds.SoundSource;
+ import net.minecraft.stats.Stats;
+@@ -89,7 +90,7 @@ public class BowItem extends ProjectileWeaponItem implements Vanishable {
+ 
+                         // CraftBukkit start
+                         if (event.getProjectile() == entityarrow.getBukkitEntity()) {
+-                            if (!world.addFreshEntity(entityarrow)) {
++                            if (!HiddenUtils.addFreshEntity(world, entityarrow, entityhuman)) { // Skylodia - Multi Arena
+                                 if (entityhuman instanceof net.minecraft.server.level.ServerPlayer) {
+                                     ((net.minecraft.server.level.ServerPlayer) entityhuman).getBukkitEntity().updateInventory();
+                                 }
+@@ -99,7 +100,9 @@ public class BowItem extends ProjectileWeaponItem implements Vanishable {
+                         // CraftBukkit end
+                     }
+ 
+-                    world.playSound((Player) null, entityhuman.getX(), entityhuman.getY(), entityhuman.getZ(), SoundEvents.ARROW_SHOOT, SoundSource.PLAYERS, 1.0F, 1.0F / (world.getRandom().nextFloat() * 0.4F + 1.2F) + f * 0.5F);
++                    //world.playSound((Player) null, entityhuman.getX(), entityhuman.getY(), entityhuman.getZ(), SoundEvents.ARROW_SHOOT, SoundSource.PLAYERS, 1.0F, 1.0F / (world.getRandom().nextFloat() * 0.4F + 1.2F) + f * 0.5F);
++                    // Skylodia Multi Arena
++                    world.playSound(entityhuman.getMultiArenaSafePlayer(), entityhuman.getX(), entityhuman.getY(), entityhuman.getZ(), SoundEvents.ARROW_SHOOT, SoundSource.PLAYERS, 1.0F, 1.0F / (world.getRandom().nextFloat() * 0.4F + 1.2F) + f * 0.5F);
+                     if (!flag1 && !entityhuman.getAbilities().instabuild) {
+                         itemstack1.shrink(1);
+                         if (itemstack1.isEmpty()) {
+diff --git a/src/main/java/net/minecraft/world/item/EggItem.java b/src/main/java/net/minecraft/world/item/EggItem.java
+index ef2197a23aef0a4215fae09bd4618e449e14c64e..382257677b8e6eddba0b0c65297782fe2e8f1552 100644
+--- a/src/main/java/net/minecraft/world/item/EggItem.java
++++ b/src/main/java/net/minecraft/world/item/EggItem.java
+@@ -1,5 +1,6 @@
+ package net.minecraft.world.item;
+ 
++import fr.skylodia.craftbukkit.HiddenUtils;
+ import net.minecraft.sounds.SoundEvents;
+ import net.minecraft.sounds.SoundSource;
+ import net.minecraft.stats.Stats;
+@@ -27,14 +28,16 @@ public class EggItem extends Item {
+             entityegg.shootFromRotation(user, user.getXRot(), user.getYRot(), 0.0F, 1.5F, (float) world.purpurConfig.eggProjectileOffset); // Purpur
+             // Paper start - PlayerLaunchProjectileEvent
+             com.destroystokyo.paper.event.player.PlayerLaunchProjectileEvent event = new com.destroystokyo.paper.event.player.PlayerLaunchProjectileEvent((org.bukkit.entity.Player) user.getBukkitEntity(), org.bukkit.craftbukkit.inventory.CraftItemStack.asCraftMirror(itemstack), (org.bukkit.entity.Projectile) entityegg.getBukkitEntity());
+-            if (event.callEvent() && world.addFreshEntity(entityegg)) {
++            if (event.callEvent() && HiddenUtils.addFreshEntity(world, entityegg, user)) { // Skylodia Multi Arena
+                 if (event.shouldConsume() && !user.getAbilities().instabuild) {
+                     itemstack.shrink(1);
+                 } else if (user instanceof net.minecraft.server.level.ServerPlayer) {
+                     ((net.minecraft.server.level.ServerPlayer) user).getBukkitEntity().updateInventory();
+                 }
+ 
+-                world.playSound((Player) null, user.getX(), user.getY(), user.getZ(), net.minecraft.sounds.SoundEvents.EGG_THROW, net.minecraft.sounds.SoundSource.PLAYERS, 0.5F, 0.4F / (net.minecraft.world.entity.Entity.SHARED_RANDOM.nextFloat() * 0.4F + 0.8F));
++                //world.playSound(null, user.getX(), user.getY(), user.getZ(), net.minecraft.sounds.SoundEvents.EGG_THROW, net.minecraft.sounds.SoundSource.PLAYERS, 0.5F, 0.4F / (net.minecraft.world.entity.Entity.SHARED_RANDOM.nextFloat() * 0.4F + 0.8F));
++                // Skylodia - Multi Arena
++                world.playSound(user.getMultiArenaSafePlayer(), user.getX(), user.getY(), user.getZ(), net.minecraft.sounds.SoundEvents.EGG_THROW, net.minecraft.sounds.SoundSource.PLAYERS, 0.5F, 0.4F / (net.minecraft.world.entity.Entity.SHARED_RANDOM.nextFloat() * 0.4F + 0.8F));
+                 user.awardStat(Stats.ITEM_USED.get(this));
+             } else {
+                 if (user instanceof net.minecraft.server.level.ServerPlayer) {
+@@ -44,7 +47,9 @@ public class EggItem extends Item {
+             }
+             // Paper end - PlayerLaunchProjectileEvent
+         }
+-        world.playSound((Player) null, user.getX(), user.getY(), user.getZ(), SoundEvents.EGG_THROW, SoundSource.PLAYERS, 0.5F, 0.4F / (world.getRandom().nextFloat() * 0.4F + 0.8F));
++        // Skylodia Multi Arena
++        //world.playSound(null, user.getX(), user.getY(), user.getZ(), SoundEvents.EGG_THROW, SoundSource.PLAYERS, 0.5F, 0.4F / (world.getRandom().nextFloat() * 0.4F + 0.8F));
++        world.playSound(user.getMultiArenaSafePlayer(), user.getX(), user.getY(), user.getZ(), SoundEvents.EGG_THROW, SoundSource.PLAYERS, 0.5F, 0.4F / (world.getRandom().nextFloat() * 0.4F + 0.8F));
+ 
+         /* // Paper start - PlayerLaunchProjectileEvent; moved up
+         user.awardStat(Stats.ITEM_USED.get(this));
+diff --git a/src/main/java/net/minecraft/world/item/EnderpearlItem.java b/src/main/java/net/minecraft/world/item/EnderpearlItem.java
+index 8031e38c66468676b3b4a7443d6678eec6b1e8a4..d8f954311e7c293500a8d72476f6f4a049a02b62 100644
+--- a/src/main/java/net/minecraft/world/item/EnderpearlItem.java
++++ b/src/main/java/net/minecraft/world/item/EnderpearlItem.java
+@@ -1,5 +1,6 @@
+ package net.minecraft.world.item;
+ 
++import fr.skylodia.craftbukkit.HiddenUtils;
+ import net.minecraft.sounds.SoundEvents;
+ import net.minecraft.sounds.SoundSource;
+ import net.minecraft.stats.Stats;
+@@ -27,14 +28,16 @@ public class EnderpearlItem extends Item {
+             entityenderpearl.shootFromRotation(user, user.getXRot(), user.getYRot(), 0.0F, 1.5F, (float) world.purpurConfig.enderPearlProjectileOffset); // Purpur
+             // Paper start - PlayerLaunchProjectileEvent
+             com.destroystokyo.paper.event.player.PlayerLaunchProjectileEvent event = new com.destroystokyo.paper.event.player.PlayerLaunchProjectileEvent((org.bukkit.entity.Player) user.getBukkitEntity(), org.bukkit.craftbukkit.inventory.CraftItemStack.asCraftMirror(itemstack), (org.bukkit.entity.Projectile) entityenderpearl.getBukkitEntity());
+-            if (event.callEvent() && world.addFreshEntity(entityenderpearl)) {
++            if (event.callEvent() && HiddenUtils.addFreshEntity(world, entityenderpearl, user)) { // Skylodia - Multi arena
+                 if (event.shouldConsume() && !user.getAbilities().instabuild) {
+                     itemstack.shrink(1);
+                 } else if (user instanceof net.minecraft.server.level.ServerPlayer) {
+                     ((net.minecraft.server.level.ServerPlayer) user).getBukkitEntity().updateInventory();
+                 }
+ 
+-                world.playSound((Player) null, user.getX(), user.getY(), user.getZ(), SoundEvents.ENDER_PEARL_THROW, SoundSource.NEUTRAL, 0.5F, 0.4F / (net.minecraft.world.entity.Entity.SHARED_RANDOM.nextFloat() * 0.4F + 0.8F));
++                //world.playSound((Player) null, user.getX(), user.getY(), user.getZ(), SoundEvents.ENDER_PEARL_THROW, SoundSource.NEUTRAL, 0.5F, 0.4F / (net.minecraft.world.entity.Entity.SHARED_RANDOM.nextFloat() * 0.4F + 0.8F));
++                // Skylodia - Multi Arena
++                world.playSound(user.getMultiArenaSafePlayer(), user.getX(), user.getY(), user.getZ(), SoundEvents.ENDER_PEARL_THROW, SoundSource.NEUTRAL, 0.5F, 0.4F / (net.minecraft.world.entity.Entity.SHARED_RANDOM.nextFloat() * 0.4F + 0.8F));
+                 user.awardStat(Stats.ITEM_USED.get(this));
+                 user.getCooldowns().addCooldown(this, user.getAbilities().instabuild ? world.purpurConfig.enderPearlCooldownCreative : world.purpurConfig.enderPearlCooldown); // Purpur
+             } else {
+diff --git a/src/main/java/net/minecraft/world/item/ExperienceBottleItem.java b/src/main/java/net/minecraft/world/item/ExperienceBottleItem.java
+index 39fe6734c8dcd34c563e33e717937bbd91882e1e..17152533671302d76877775a2d34611fd91057ab 100644
+--- a/src/main/java/net/minecraft/world/item/ExperienceBottleItem.java
++++ b/src/main/java/net/minecraft/world/item/ExperienceBottleItem.java
+@@ -1,5 +1,6 @@
+ package net.minecraft.world.item;
+ 
++import fr.skylodia.craftbukkit.HiddenUtils;
+ import net.minecraft.sounds.SoundEvents;
+ import net.minecraft.sounds.SoundSource;
+ import net.minecraft.stats.Stats;
+@@ -29,14 +30,16 @@ public class ExperienceBottleItem extends Item {
+             thrownExperienceBottle.shootFromRotation(user, user.getXRot(), user.getYRot(), -20.0F, 0.7F, 1.0F);
+             // Paper start - PlayerLaunchProjectileEvent
+             com.destroystokyo.paper.event.player.PlayerLaunchProjectileEvent event = new com.destroystokyo.paper.event.player.PlayerLaunchProjectileEvent((org.bukkit.entity.Player) user.getBukkitEntity(), org.bukkit.craftbukkit.inventory.CraftItemStack.asCraftMirror(itemStack), (org.bukkit.entity.Projectile) thrownExperienceBottle.getBukkitEntity());
+-            if (event.callEvent() && world.addFreshEntity(thrownExperienceBottle)) {
++            if (event.callEvent() && HiddenUtils.addFreshEntity(world, thrownExperienceBottle, user)) { // Skylodia - Multi Arena
+                 if (event.shouldConsume() && !user.getAbilities().instabuild) {
+                     itemStack.shrink(1);
+                 } else if (user instanceof net.minecraft.server.level.ServerPlayer) {
+                     ((net.minecraft.server.level.ServerPlayer) user).getBukkitEntity().updateInventory();
+                 }
+ 
+-                world.playSound((Player) null, user.getX(), user.getY(), user.getZ(), SoundEvents.EXPERIENCE_BOTTLE_THROW, SoundSource.NEUTRAL, 0.5F, 0.4F / (net.minecraft.world.entity.Entity.SHARED_RANDOM.nextFloat() * 0.4F + 0.8F));
++                //world.playSound((Player) null, user.getX(), user.getY(), user.getZ(), SoundEvents.EXPERIENCE_BOTTLE_THROW, SoundSource.NEUTRAL, 0.5F, 0.4F / (net.minecraft.world.entity.Entity.SHARED_RANDOM.nextFloat() * 0.4F + 0.8F));
++                // Skylodia - Multi Arena
++                world.playSound(user.getMultiArenaSafePlayer(), user.getX(), user.getY(), user.getZ(), SoundEvents.EXPERIENCE_BOTTLE_THROW, SoundSource.NEUTRAL, 0.5F, 0.4F / (net.minecraft.world.entity.Entity.SHARED_RANDOM.nextFloat() * 0.4F + 0.8F));
+                 user.awardStat(Stats.ITEM_USED.get(this));
+             } else {
+                 if (user instanceof net.minecraft.server.level.ServerPlayer) {
+diff --git a/src/main/java/net/minecraft/world/item/FireworkRocketItem.java b/src/main/java/net/minecraft/world/item/FireworkRocketItem.java
+index 56d7c05c93bc074f6caba51b1741f25d6f0861cd..c4cca7430fdd5a9bbe9f4107f7495e836d33361d 100644
+--- a/src/main/java/net/minecraft/world/item/FireworkRocketItem.java
++++ b/src/main/java/net/minecraft/world/item/FireworkRocketItem.java
+@@ -4,6 +4,7 @@ import com.google.common.collect.Lists;
+ import java.util.List;
+ import java.util.function.IntFunction;
+ import javax.annotation.Nullable;
++import fr.skylodia.craftbukkit.HiddenUtils;
+ import net.minecraft.ChatFormatting;
+ import net.minecraft.core.Direction;
+ import net.minecraft.nbt.CompoundTag;
+@@ -50,7 +51,7 @@ public class FireworkRocketItem extends Item {
+             fireworkRocketEntity.spawningEntity = context.getPlayer() == null ? null : context.getPlayer().getUUID(); // Paper
+             // Paper start - PlayerLaunchProjectileEvent
+             com.destroystokyo.paper.event.player.PlayerLaunchProjectileEvent event = new com.destroystokyo.paper.event.player.PlayerLaunchProjectileEvent((org.bukkit.entity.Player) context.getPlayer().getBukkitEntity(), org.bukkit.craftbukkit.inventory.CraftItemStack.asCraftMirror(itemStack), (org.bukkit.entity.Firework) fireworkRocketEntity.getBukkitEntity());
+-            if (!event.callEvent() || !level.addFreshEntity(fireworkRocketEntity)) return InteractionResult.PASS;
++            if (!event.callEvent() || !HiddenUtils.addFreshEntity(level, fireworkRocketEntity, context.getPlayer())) return InteractionResult.PASS; // Skylodia - Multi Arena
+             if (event.shouldConsume() && !context.getPlayer().getAbilities().instabuild) itemStack.shrink(1);
+             else if (context.getPlayer() instanceof net.minecraft.server.level.ServerPlayer) ((net.minecraft.server.level.ServerPlayer) context.getPlayer()).getBukkitEntity().updateInventory();
+             // Paper end - PlayerLaunchProjectileEvent
+@@ -68,7 +69,7 @@ public class FireworkRocketItem extends Item {
+                 fireworkRocketEntity.spawningEntity = user.getUUID(); // Paper
+                 // Paper start - PlayerElytraBoostEvent
+                 com.destroystokyo.paper.event.player.PlayerElytraBoostEvent event = new com.destroystokyo.paper.event.player.PlayerElytraBoostEvent((org.bukkit.entity.Player) user.getBukkitEntity(), org.bukkit.craftbukkit.inventory.CraftItemStack.asCraftMirror(itemStack), (org.bukkit.entity.Firework) fireworkRocketEntity.getBukkitEntity());
+-                if (event.callEvent() && world.addFreshEntity(fireworkRocketEntity)) {
++                if (event.callEvent() && HiddenUtils.addFreshEntity(world, fireworkRocketEntity, user)) { // Skylodia - Multi Arena
+                     user.awardStat(Stats.ITEM_USED.get(this));
+                     // Purpur start
+                     if (world.purpurConfig.elytraDamagePerFireworkBoost > 0) {
+diff --git a/src/main/java/net/minecraft/world/item/SnowballItem.java b/src/main/java/net/minecraft/world/item/SnowballItem.java
+index caab0c1e2bc5696080750797cbf1c93f57799f7d..95a8160727f11b86739a7856aa8d42ca7574bfce 100644
+--- a/src/main/java/net/minecraft/world/item/SnowballItem.java
++++ b/src/main/java/net/minecraft/world/item/SnowballItem.java
+@@ -1,5 +1,6 @@
+ package net.minecraft.world.item;
+ 
++import fr.skylodia.craftbukkit.HiddenUtils;
+ import net.minecraft.sounds.SoundEvents;
+ import net.minecraft.sounds.SoundSource;
+ import net.minecraft.stats.Stats;
+@@ -28,7 +29,7 @@ public class SnowballItem extends Item {
+             entitysnowball.shootFromRotation(user, user.getXRot(), user.getYRot(), 0.0F, 1.5F, (float) world.purpurConfig.snowballProjectileOffset); // Purpur
+             // Paper start - PlayerLaunchProjectileEvent
+             com.destroystokyo.paper.event.player.PlayerLaunchProjectileEvent event = new com.destroystokyo.paper.event.player.PlayerLaunchProjectileEvent((org.bukkit.entity.Player) user.getBukkitEntity(), org.bukkit.craftbukkit.inventory.CraftItemStack.asCraftMirror(itemstack), (org.bukkit.entity.Projectile) entitysnowball.getBukkitEntity());
+-            if (event.callEvent() && world.addFreshEntity(entitysnowball)) {
++            if (event.callEvent() && HiddenUtils.addFreshEntity(world, entitysnowball, user)) { // Skylodia - Multi Arena
+                 user.awardStat(Stats.ITEM_USED.get(this));
+                 if (event.shouldConsume() && !user.getAbilities().instabuild) {
+                     // Paper end - PlayerLaunchProjectileEvent
+@@ -37,7 +38,9 @@ public class SnowballItem extends Item {
+                     ((net.minecraft.server.level.ServerPlayer) user).getBukkitEntity().updateInventory();  // Paper - PlayerLaunchProjectileEvent
+                 }
+ 
+-                world.playSound((Player) null, user.getX(), user.getY(), user.getZ(), SoundEvents.SNOWBALL_THROW, SoundSource.NEUTRAL, 0.5F, 0.4F / (world.getRandom().nextFloat() * 0.4F + 0.8F));
++                //world.playSound((Player) null, user.getX(), user.getY(), user.getZ(), SoundEvents.SNOWBALL_THROW, SoundSource.NEUTRAL, 0.5F, 0.4F / (world.getRandom().nextFloat() * 0.4F + 0.8F));
++                // Skylodia - Multi Arena
++                world.playSound(user.getMultiArenaSafePlayer(), user.getX(), user.getY(), user.getZ(), SoundEvents.SNOWBALL_THROW, SoundSource.NEUTRAL, 0.5F, 0.4F / (world.getRandom().nextFloat() * 0.4F + 0.8F));
+             } else { // Paper - PlayerLaunchProjectileEvent
+                 if (user instanceof net.minecraft.server.level.ServerPlayer) ((net.minecraft.server.level.ServerPlayer) user).getBukkitEntity().updateInventory(); // Paper - PlayerLaunchProjectileEvent
+                 return InteractionResultHolder.fail(itemstack); // Paper - PlayerLaunchProjectileEvent
+diff --git a/src/main/java/net/minecraft/world/item/SplashPotionItem.java b/src/main/java/net/minecraft/world/item/SplashPotionItem.java
+index 3bd127780091c6bb9ec17c88f0cf57b0b8f37e11..9428d7621775411009f6b12e6e78f1d49152b602 100644
+--- a/src/main/java/net/minecraft/world/item/SplashPotionItem.java
++++ b/src/main/java/net/minecraft/world/item/SplashPotionItem.java
+@@ -17,7 +17,7 @@ public class SplashPotionItem extends ThrowablePotionItem {
+         // Paper start - PlayerLaunchProjectileEvent
+         InteractionResultHolder<ItemStack> wrapper = super.use(world, user, hand);
+         if (wrapper.getResult() != net.minecraft.world.InteractionResult.FAIL) {
+-        world.playSound((Player)null, user.getX(), user.getY(), user.getZ(), SoundEvents.SPLASH_POTION_THROW, SoundSource.PLAYERS, 0.5F, 0.4F / (world.getRandom().nextFloat() * 0.4F + 0.8F));
++        world.playSound(user.getMultiArenaSafePlayer(), user.getX(), user.getY(), user.getZ(), SoundEvents.SPLASH_POTION_THROW, SoundSource.PLAYERS, 0.5F, 0.4F / (world.getRandom().nextFloat() * 0.4F + 0.8F));
+         }
+         return wrapper;
+         // Paper end - PlayerLaunchProjectileEvent
+diff --git a/src/main/java/net/minecraft/world/item/ThrowablePotionItem.java b/src/main/java/net/minecraft/world/item/ThrowablePotionItem.java
+index 3bbb44ae3da68afbd6012df68dee277a7dbf98c0..b214867a018226a702a785400cb9ac11554dfaf7 100644
+--- a/src/main/java/net/minecraft/world/item/ThrowablePotionItem.java
++++ b/src/main/java/net/minecraft/world/item/ThrowablePotionItem.java
+@@ -1,5 +1,6 @@
+ package net.minecraft.world.item;
+ 
++import fr.skylodia.craftbukkit.HiddenUtils;
+ import net.minecraft.stats.Stats;
+ import net.minecraft.world.InteractionHand;
+ import net.minecraft.world.InteractionResultHolder;
+@@ -21,7 +22,7 @@ public class ThrowablePotionItem extends PotionItem {
+             thrownPotion.shootFromRotation(user, user.getXRot(), user.getYRot(), -20.0F, 0.5F, (float) world.purpurConfig.throwablePotionProjectileOffset); // Purpur
+             // Paper start - PlayerLaunchProjectileEvent
+             com.destroystokyo.paper.event.player.PlayerLaunchProjectileEvent event = new com.destroystokyo.paper.event.player.PlayerLaunchProjectileEvent((org.bukkit.entity.Player) user.getBukkitEntity(), org.bukkit.craftbukkit.inventory.CraftItemStack.asCraftMirror(itemStack), (org.bukkit.entity.Projectile) thrownPotion.getBukkitEntity());
+-            if (event.callEvent() && world.addFreshEntity(thrownPotion)) {
++            if (event.callEvent() && HiddenUtils.addFreshEntity(world, thrownPotion, user)) { // Skylodia - Multi Arena
+                 if (event.shouldConsume() && !user.getAbilities().instabuild) {
+                     itemStack.shrink(1);
+                 } else if (user instanceof net.minecraft.server.level.ServerPlayer) {
+diff --git a/src/main/java/net/minecraft/world/item/TridentItem.java b/src/main/java/net/minecraft/world/item/TridentItem.java
+index dcd6f241271beecf9601e34547225d7921958c20..cf54e59abf983d5591170137ebce97f43b5ac903 100644
+--- a/src/main/java/net/minecraft/world/item/TridentItem.java
++++ b/src/main/java/net/minecraft/world/item/TridentItem.java
+@@ -3,6 +3,7 @@ package net.minecraft.world.item;
+ import com.google.common.collect.ImmutableMultimap;
+ import com.google.common.collect.ImmutableMultimap.Builder;
+ import com.google.common.collect.Multimap;
++import fr.skylodia.craftbukkit.HiddenUtils;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.sounds.SoundEvent;
+ import net.minecraft.sounds.SoundEvents;
+@@ -93,7 +94,7 @@ public class TridentItem extends Item implements Vanishable {
+                             // CraftBukkit start
+                             // Paper start - PlayerLaunchProjectileEvent
+                             com.destroystokyo.paper.event.player.PlayerLaunchProjectileEvent event = new com.destroystokyo.paper.event.player.PlayerLaunchProjectileEvent((org.bukkit.entity.Player) entityhuman.getBukkitEntity(), org.bukkit.craftbukkit.inventory.CraftItemStack.asCraftMirror(stack), (org.bukkit.entity.Projectile) entitythrowntrident.getBukkitEntity());
+-                            if (!event.callEvent() || !world.addFreshEntity(entitythrowntrident)) {
++                            if (!event.callEvent() || !HiddenUtils.addFreshEntity(world, entitythrowntrident, entityhuman)) { // Skylodia - Multi Arena
+                                 // Paper end - PlayerLaunchProjectileEvent
+                                 if (entityhuman instanceof net.minecraft.server.level.ServerPlayer) {
+                                     ((net.minecraft.server.level.ServerPlayer) entityhuman).getBukkitEntity().updateInventory();
+@@ -109,7 +110,9 @@ public class TridentItem extends Item implements Vanishable {
+                             entitythrowntrident.pickupItemStack = stack.copy(); // SPIGOT-4511 update since damage call moved
+                             // CraftBukkit end
+ 
+-                            world.playSound((Player) null, (Entity) entitythrowntrident, SoundEvents.TRIDENT_THROW, SoundSource.PLAYERS, 1.0F, 1.0F);
++                            //world.playSound((Player) null, (Entity) entitythrowntrident, SoundEvents.TRIDENT_THROW, SoundSource.PLAYERS, 1.0F, 1.0F);
++                            // Skylodia - Multi Arena
++                            world.playSound(entityhuman.getMultiArenaSafePlayer(), (Entity) entitythrowntrident, SoundEvents.TRIDENT_THROW, SoundSource.PLAYERS, 1.0F, 1.0F);
+                             if (event.shouldConsume() && !entityhuman.getAbilities().instabuild) { // Paper - PlayerLaunchProjectileEvent
+                                 entityhuman.getInventory().removeItem(stack);
+                             }
+@@ -165,7 +168,9 @@ public class TridentItem extends Item implements Vanishable {
+                             soundeffect = SoundEvents.TRIDENT_RIPTIDE_1;
+                         }
+ 
+-                        world.playSound((Player) null, (Entity) entityhuman, soundeffect, SoundSource.PLAYERS, 1.0F, 1.0F);
++                        //world.playSound((Player) null, (Entity) entityhuman, soundeffect, SoundSource.PLAYERS, 1.0F, 1.0F);
++                        // Skylodia - Multi Arena
++                        world.playSound(entityhuman.getMultiArenaSafePlayer(), (Entity) entityhuman, soundeffect, SoundSource.PLAYERS, 1.0F, 1.0F);
+                     }
+ 
+                 }
+diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
+index 988cc1290200de629a4c24cc67a03e69c2fcc727..002b9b3983739896e04b0116e92671942ab65fcf 100644
+--- a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
++++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
+@@ -6,6 +6,8 @@ import com.google.common.collect.ImmutableSet;
+ import com.google.common.io.BaseEncoding;
+ import com.mojang.authlib.GameProfile;
+ import com.mojang.datafixers.util.Pair;
++import fr.skylodia.bukkit.api.hidden.HiddenPredicate;
++import fr.skylodia.craftbukkit.HiddenPlayer;
+ import it.unimi.dsi.fastutil.shorts.ShortArraySet;
+ import it.unimi.dsi.fastutil.shorts.ShortSet;
+ import java.io.ByteArrayOutputStream;
+@@ -1919,7 +1921,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
+         this.hideEntity0(plugin, entity);
+     }
+ 
+-    private void hideEntity0(@Nullable Plugin plugin, org.bukkit.entity.Entity entity) {
++    public void hideEntity0(@Nullable Plugin plugin, org.bukkit.entity.Entity entity) {
+         Preconditions.checkArgument(entity != null, "Entity hidden cannot be null");
+         if (this.getHandle().connection == null) return;
+         if (this.equals(entity)) return;
+@@ -3523,5 +3525,20 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
+         if (this.getHandle().connection == null) return;
+         this.getHandle().connection.send(new net.minecraft.network.protocol.game.ClientboundPlayerCombatKillPacket(getEntityId(), io.papermc.paper.adventure.PaperAdventure.asVanilla(message)));
+     }
++
++    @Override
++    public void setMultiArena(final Plugin plugin, final HiddenPredicate hiddenPredicate) {
++        this.getHandle().setMultiArena(new HiddenPlayer(plugin, this.getHandle(), hiddenPredicate));
++    }
++
++    @Override
++    public boolean hasMultiArena() {
++        return this.getHandle().hasMultiArena();
++    }
++
++    @Override
++    public void removeMultiArena() {
++        this.getHandle().removeMultiArena(false);
++    }
+     // Purpur end
+ }
+diff --git a/src/main/resources/META-INF/services/fr.skylodia.bukkit.api.SkylodiaBukkitAPI b/src/main/resources/META-INF/services/fr.skylodia.bukkit.api.SkylodiaBukkitAPI
+new file mode 100644
+index 0000000000000000000000000000000000000000..d08760ccf11fe8120579c5d62d6147a1da9b7f30
+--- /dev/null
++++ b/src/main/resources/META-INF/services/fr.skylodia.bukkit.api.SkylodiaBukkitAPI
+@@ -0,0 +1 @@
++fr.skylodia.craftbukkit.CraftSkylodiaAPI

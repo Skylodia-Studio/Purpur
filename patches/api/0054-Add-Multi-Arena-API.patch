@@ -1,0 +1,103 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Ibramsou <kasobanboui@gmail.com>
+Date: Sun, 7 Apr 2024 14:31:52 +0200
+Subject: [PATCH] Add Multi Arena API
+
+
+diff --git a/src/main/java/fr/skylodia/bukkit/api/SkylodiaBukkitAPI.java b/src/main/java/fr/skylodia/bukkit/api/SkylodiaBukkitAPI.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..2c63b7fe65291ffb1ba822b2ee221258c46a9af6
+--- /dev/null
++++ b/src/main/java/fr/skylodia/bukkit/api/SkylodiaBukkitAPI.java
+@@ -0,0 +1,16 @@
++package fr.skylodia.bukkit.api;
++
++import fr.skylodia.bukkit.api.hidden.HiddenPredicate;
++import org.bukkit.entity.Player;
++import org.bukkit.plugin.Plugin;
++
++public interface SkylodiaBukkitAPI {
++
++    void setMultiArena(Plugin plugin, Player player);
++
++    void setMultiArena(Plugin plugin, Player player, HiddenPredicate shouldSee);
++
++    void removeMultiArena(Player player);
++
++    boolean hasMultiArena(Player player);
++}
+diff --git a/src/main/java/fr/skylodia/bukkit/api/SkylodiaBukkitProvider.java b/src/main/java/fr/skylodia/bukkit/api/SkylodiaBukkitProvider.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..3f81680844945e604e8d4f268ebf1cf8c0783d8f
+--- /dev/null
++++ b/src/main/java/fr/skylodia/bukkit/api/SkylodiaBukkitProvider.java
+@@ -0,0 +1,23 @@
++package fr.skylodia.bukkit.api;
++
++import java.util.Iterator;
++import java.util.ServiceLoader;
++
++public class SkylodiaBukkitProvider {
++
++    private static final SkylodiaBukkitAPI API;
++
++    public static SkylodiaBukkitAPI getApi() {
++        return API;
++    }
++
++    static {
++        final ServiceLoader<SkylodiaBukkitAPI> loader = ServiceLoader.load(SkylodiaBukkitAPI.class, SkylodiaBukkitProvider.class.getClassLoader());
++        final Iterator<SkylodiaBukkitAPI> iterator = loader.iterator();
++        if (iterator.hasNext()) {
++            API = iterator.next();
++        } else {
++            throw new IllegalStateException("No SkylodiaBukkitAPI implementation found !");
++        }
++    }
++}
+diff --git a/src/main/java/fr/skylodia/bukkit/api/hidden/HiddenPredicate.java b/src/main/java/fr/skylodia/bukkit/api/hidden/HiddenPredicate.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..8648cdaa80e4f4071bb655e2f08c86dc706cfb78
+--- /dev/null
++++ b/src/main/java/fr/skylodia/bukkit/api/hidden/HiddenPredicate.java
+@@ -0,0 +1,9 @@
++package fr.skylodia.bukkit.api.hidden;
++
++import org.bukkit.entity.Player;
++
++@FunctionalInterface
++public interface HiddenPredicate {
++
++    boolean shouldSee(Player player, Player viewer);
++}
+diff --git a/src/main/java/org/bukkit/entity/Player.java b/src/main/java/org/bukkit/entity/Player.java
+index 5d22249f7bc98bc88ee798974f481c37807f7c5e..f388c0023f6d6a9a475bbacff9de46b66397ed12 100644
+--- a/src/main/java/org/bukkit/entity/Player.java
++++ b/src/main/java/org/bukkit/entity/Player.java
+@@ -8,6 +8,7 @@ import java.util.Collection;
+ import java.util.Date;
+ import java.util.Map;
+ import java.util.UUID;
++import fr.skylodia.bukkit.api.hidden.HiddenPredicate;
+ import org.bukkit.BanEntry;
+ import org.bukkit.DyeColor;
+ import org.bukkit.Effect;
+@@ -3456,6 +3457,7 @@ public interface Player extends HumanEntity, Conversable, OfflinePlayer, PluginM
+      */
+     @Deprecated(since = "1.20.1")
+     void removeAdditionalChatCompletions(@NotNull java.util.Collection<String> completions);
++
+     // Paper end - custom chat completions API
+ 
+     // Spigot start
+@@ -3830,4 +3832,10 @@ public interface Player extends HumanEntity, Conversable, OfflinePlayer, PluginM
+         sendDeathScreen(message);
+     }
+     // Purpur end
++
++    void setMultiArena(Plugin plugin, HiddenPredicate hiddenPredicate);
++
++    boolean hasMultiArena();
++
++    void removeMultiArena();
+ }

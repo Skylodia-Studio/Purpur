@@ -8,6 +8,7 @@ plugins {
     id("io.papermc.paperweight.patcher") version "1.5.12"
 }
 
+
 allprojects {
     apply(plugin = "java")
     apply(plugin = "maven-publish")
@@ -20,6 +21,8 @@ allprojects {
 }
 
 val paperMavenPublicUrl = "https://repo.papermc.io/repository/maven-public/"
+
+val secretsFile = File("secrets.gradle")
 
 subprojects {
     tasks.withType<JavaCompile>().configureEach {
