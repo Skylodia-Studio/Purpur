@@ -1,0 +1,106 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Ibramsou <kasobanboui@gmail.com>
+Date: Mon, 8 Apr 2024 09:25:35 +0200
+Subject: [PATCH] Make Crops Grow Without Light And Water
+
+
+diff --git a/src/main/java/net/minecraft/world/level/Level.java b/src/main/java/net/minecraft/world/level/Level.java
+index eebe6378de52e780aabfad3c414564349196ec6e..4ba15dac85c77058a23ab49543e91c0d9a8cca3f 100644
+--- a/src/main/java/net/minecraft/world/level/Level.java
++++ b/src/main/java/net/minecraft/world/level/Level.java
+@@ -210,6 +210,22 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+         this.playerBreedingCooldowns.put(new BreedingCooldownPair(player, animalType), new Object());
+     }
+ 
++    // Skylodia Start
++
++    private boolean growWithoutLightAndWater;
++
++    @Override
++    public boolean isGrowWithoutLightAndWater() {
++        return this.growWithoutLightAndWater;
++    }
++
++    @Override
++    public void setGrowWithoutLightAndWater(final boolean growWithoutLightAndWater) {
++        this.growWithoutLightAndWater = growWithoutLightAndWater;
++    }
++
++    // Skylodia End
++
+     private static final class BreedingCooldownPair {
+         private final java.util.UUID playerUUID;
+         private final Class<? extends net.minecraft.world.entity.animal.Animal> animalType;
+diff --git a/src/main/java/net/minecraft/world/level/LevelReader.java b/src/main/java/net/minecraft/world/level/LevelReader.java
+index 12eaafdbd324fa36b3f46c3b644bc8117a4123ad..d0252ab52324528c4d8443e3f6305a6a8c4ef719 100644
+--- a/src/main/java/net/minecraft/world/level/LevelReader.java
++++ b/src/main/java/net/minecraft/world/level/LevelReader.java
+@@ -237,4 +237,12 @@ public interface LevelReader extends BlockAndTintGetter, CollisionGetter, Signal
+         Registry<T> registry = this.registryAccess().registryOrThrow(registryRef);
+         return registry.asLookup().filterFeatures(this.enabledFeatures());
+     }
++
++    // Skylodia Start
++    default boolean isGrowWithoutLightAndWater() {
++        return false;
++    }
++
++    default void setGrowWithoutLightAndWater(boolean growWithoutLightAndWater) {}
++    // Skylodia End
+ }
+diff --git a/src/main/java/net/minecraft/world/level/block/CropBlock.java b/src/main/java/net/minecraft/world/level/block/CropBlock.java
+index 2077cb5dcf2352c9d5b502744aeb9a66df256939..9d03a475029e1e8584dcb176b47f8e6cc1968ef9 100644
+--- a/src/main/java/net/minecraft/world/level/block/CropBlock.java
++++ b/src/main/java/net/minecraft/world/level/block/CropBlock.java
+@@ -77,7 +77,7 @@ public class CropBlock extends BushBlock implements BonemealableBlock {
+ 
+     @Override
+     public void randomTick(BlockState state, ServerLevel world, BlockPos pos, RandomSource random) {
+-        if (world.getRawBrightness(pos, 0) >= 9) {
++        if (world.isGrowWithoutLightAndWater() || world.getRawBrightness(pos, 0) >= 9) {
+             int i = this.getAge(state);
+ 
+             if (i < this.getMaxAge()) {
+@@ -173,7 +173,7 @@ public class CropBlock extends BushBlock implements BonemealableBlock {
+     }
+ 
+     protected static boolean hasSufficientLight(LevelReader world, BlockPos pos) {
+-        return world.getRawBrightness(pos, 0) >= 8;
++        return world.isGrowWithoutLightAndWater() || world.getRawBrightness(pos, 0) >= 8;
+     }
+ 
+     @Override
+diff --git a/src/main/java/net/minecraft/world/level/block/FarmBlock.java b/src/main/java/net/minecraft/world/level/block/FarmBlock.java
+index 0c39126ce51439cce05747161aba43bce33a12d8..9f2c811e737c452bace8a88f96ff963cca1c02e7 100644
+--- a/src/main/java/net/minecraft/world/level/block/FarmBlock.java
++++ b/src/main/java/net/minecraft/world/level/block/FarmBlock.java
+@@ -95,7 +95,7 @@ public class FarmBlock extends Block {
+         if (i > 0 && world.paperConfig().tickRates.wetFarmland != 1 && (world.paperConfig().tickRates.wetFarmland < 1 || (net.minecraft.server.MinecraftServer.currentTick + pos.hashCode()) % world.paperConfig().tickRates.wetFarmland != 0)) { return; } // Paper - Configurable random tick rates for blocks
+         if (i == 0 && world.paperConfig().tickRates.dryFarmland != 1 && (world.paperConfig().tickRates.dryFarmland < 1 || (net.minecraft.server.MinecraftServer.currentTick + pos.hashCode()) % world.paperConfig().tickRates.dryFarmland != 0)) { return; } // Paper - Configurable random tick rates for blocks
+ 
+-        if (!FarmBlock.isNearWater(world, pos) && !world.isRainingAt(pos.above())) {
++        if (!world.isGrowWithoutLightAndWater() && !FarmBlock.isNearWater(world, pos) && !world.isRainingAt(pos.above())) { // Skylodia
+             if (i > 0) {
+                 org.bukkit.craftbukkit.event.CraftEventFactory.handleMoistureChangeEvent(world, pos, (BlockState) state.setValue(FarmBlock.MOISTURE, i - 1), 2); // CraftBukkit
+             } else if (!FarmBlock.shouldMaintainFarmland(world, pos)) {
+diff --git a/src/main/java/org/bukkit/craftbukkit/CraftWorld.java b/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
+index 69f0c853ed7287c5a93b0a67e266255090e2a9ca..b36ce904107744edda666a76339a14805e397082 100644
+--- a/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
++++ b/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
+@@ -2445,6 +2445,16 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+         return this.getStructures(x, z, struct -> registry.getKey(struct).equals(key));
+     }
+ 
++    @Override
++    public boolean isGrowWithoutLightAndWater() {
++        return this.getHandle().isGrowWithoutLightAndWater();
++    }
++
++    @Override
++    public void setGrowWithoutLightAndWater(final boolean growWithoutLightAndWater) {
++        this.getHandle().setGrowWithoutLightAndWater(growWithoutLightAndWater);
++    }
++
+     private List<GeneratedStructure> getStructures(int x, int z, Predicate<net.minecraft.world.level.levelgen.structure.Structure> predicate) {
+         List<GeneratedStructure> structures = new ArrayList<>();
+         for (StructureStart start : this.getHandle().structureManager().startsForStructure(new ChunkPos(x, z), predicate)) {

@@ -1,0 +1,23 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Ibramsou <kasobanboui@gmail.com>
+Date: Mon, 8 Apr 2024 09:25:07 +0200
+Subject: [PATCH] World setGrowWithoutLightAndWater Method
+
+
+diff --git a/src/main/java/org/bukkit/World.java b/src/main/java/org/bukkit/World.java
+index 565ce4b0c5eb300953aaefa786b9f8938c771f2a..fff8adf01552bbeeda2cd2b8df92b07361784e2e 100644
+--- a/src/main/java/org/bukkit/World.java
++++ b/src/main/java/org/bukkit/World.java
+@@ -4388,6 +4388,12 @@ public interface World extends RegionAccessor, WorldInfo, PluginMessageRecipient
+     @NotNull
+     public Collection<GeneratedStructure> getStructures(int x, int z, @NotNull Structure structure);
+ 
++    // Skylodia start
++    boolean isGrowWithoutLightAndWater();
++
++    void setGrowWithoutLightAndWater(boolean growWithoutLightAndWater);
++    // Skylodia end
++
+     /**
+      * Represents various map environment types that a world may be
+      */
