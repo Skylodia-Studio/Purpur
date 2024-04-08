@@ -1,0 +1,19 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Ibramsou <kasobanboui@gmail.com>
+Date: Mon, 8 Apr 2024 08:49:46 +0200
+Subject: [PATCH] Add Player Set Slow On SoulSand Methods
+
+
+diff --git a/src/main/java/org/bukkit/entity/Player.java b/src/main/java/org/bukkit/entity/Player.java
+index f388c0023f6d6a9a475bbacff9de46b66397ed12..5614f3a7f7894d427069866637cd54e472037028 100644
+--- a/src/main/java/org/bukkit/entity/Player.java
++++ b/src/main/java/org/bukkit/entity/Player.java
+@@ -3838,4 +3838,8 @@ public interface Player extends HumanEntity, Conversable, OfflinePlayer, PluginM
+     boolean hasMultiArena();
+ 
+     void removeMultiArena();
++
++    void setSlowedOnSoulSand(boolean slowedOnSoulSand);
++
++    boolean isSlowedOnSoulSand();
+ }

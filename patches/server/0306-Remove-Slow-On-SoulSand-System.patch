@@ -1,0 +1,318 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Ibramsou <kasobanboui@gmail.com>
+Date: Mon, 8 Apr 2024 08:50:05 +0200
+Subject: [PATCH] Remove Slow On SoulSand System
+
+
+diff --git a/src/main/java/net/minecraft/server/level/ServerPlayer.java b/src/main/java/net/minecraft/server/level/ServerPlayer.java
+index e784e7d6930bcbd7ec8c7963c556a540c5fc0953..f7e3f88036073c2969a89d2f1d8fa51ae9e40764 100644
+--- a/src/main/java/net/minecraft/server/level/ServerPlayer.java
++++ b/src/main/java/net/minecraft/server/level/ServerPlayer.java
+@@ -17,7 +17,6 @@ import java.util.OptionalInt;
+ import java.util.Set;
+ import java.util.stream.Collectors;
+ import javax.annotation.Nullable;
+-import fr.skylodia.craftbukkit.HiddenPlayer;
+ import fr.skylodia.craftbukkit.HiddenUtils;
+ import net.minecraft.BlockUtil;
+ import net.minecraft.ChatFormatting;
+diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
+index 9af88d8d2ade7a7fb9748ba2a3966baef6a88f9e..92ae31fc6b2e6cd4f74d380d831694948a315538 100644
+--- a/src/main/java/net/minecraft/world/entity/Entity.java
++++ b/src/main/java/net/minecraft/world/entity/Entity.java
+@@ -76,6 +76,7 @@ import net.minecraft.world.InteractionResult;
+ import net.minecraft.world.Nameable;
+ import net.minecraft.world.damagesource.DamageSource;
+ import net.minecraft.world.damagesource.DamageSources;
++import net.minecraft.world.entity.ai.attributes.Attributes;
+ import net.minecraft.world.entity.item.ItemEntity;
+ import net.minecraft.world.entity.player.Player;
+ import net.minecraft.world.entity.vehicle.Boat;
+@@ -97,6 +98,7 @@ import net.minecraft.world.level.block.HoneyBlock;
+ import net.minecraft.world.level.block.Mirror;
+ import net.minecraft.world.level.block.RenderShape;
+ import net.minecraft.world.level.block.Rotation;
++import net.minecraft.world.level.block.SoulSandBlock;
+ import net.minecraft.world.level.block.SoundType;
+ import net.minecraft.world.level.block.state.BlockState;
+ import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+@@ -161,6 +163,12 @@ import org.bukkit.plugin.PluginManager;
+ 
+ public abstract class Entity implements Nameable, EntityAccess, CommandSource, ScoreHolder {
+ 
++    // Skylodia start
++
++    public void onSoulSandStepOn() {}
++
++    public void onNonSoulSandStepOn() {}
++
+     @Nullable
+     private Player multiArenaOwner;
+ 
+@@ -171,6 +179,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, S
+     public boolean hasMultiArenaOwner() {
+         return this.multiArenaOwner != null && this.multiArenaOwner.hasMultiArena();
+     }
++    // Skylodia end
+ 
+     public static javax.script.ScriptEngine scriptEngine = new javax.script.ScriptEngineManager().getEngineByName("rhino"); // Purpur
+     // CraftBukkit start
+diff --git a/src/main/java/net/minecraft/world/entity/player/Abilities.java b/src/main/java/net/minecraft/world/entity/player/Abilities.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..d66fe87ab2bfb05bd53582b6ff7c59f3206abfbe
+--- /dev/null
++++ b/src/main/java/net/minecraft/world/entity/player/Abilities.java
+@@ -0,0 +1,73 @@
++package net.minecraft.world.entity.player;
++
++import net.minecraft.nbt.CompoundTag;
++
++public class Abilities {
++    public boolean invulnerable;
++    public boolean flying;
++    public boolean mayfly;
++    public boolean instabuild;
++    public boolean mayBuild = true;
++    public float flyingSpeed = 0.05F;
++    public float walkingSpeed = 0.1F;
++    public float walkSpeedMultiplier = 1F;
++
++    public void addSaveData(CompoundTag nbt) {
++        CompoundTag compoundTag = new CompoundTag();
++        compoundTag.putBoolean("invulnerable", this.invulnerable);
++        compoundTag.putBoolean("flying", this.flying);
++        compoundTag.putBoolean("mayfly", this.mayfly);
++        compoundTag.putBoolean("instabuild", this.instabuild);
++        compoundTag.putBoolean("mayBuild", this.mayBuild);
++        compoundTag.putFloat("flySpeed", this.flyingSpeed);
++        compoundTag.putFloat("walkSpeed", this.walkingSpeed);
++        nbt.put("abilities", compoundTag);
++    }
++
++    public void loadSaveData(CompoundTag nbt) {
++        if (nbt.contains("abilities", 10)) {
++            CompoundTag compoundTag = nbt.getCompound("abilities");
++            this.invulnerable = compoundTag.getBoolean("invulnerable");
++            this.flying = compoundTag.getBoolean("flying");
++            this.mayfly = compoundTag.getBoolean("mayfly");
++            this.instabuild = compoundTag.getBoolean("instabuild");
++            if (compoundTag.contains("flySpeed", 99)) {
++                this.flyingSpeed = compoundTag.getFloat("flySpeed");
++                this.walkingSpeed = compoundTag.getFloat("walkSpeed");
++            }
++
++            if (compoundTag.contains("mayBuild", 1)) {
++                this.mayBuild = compoundTag.getBoolean("mayBuild");
++            }
++        }
++
++    }
++
++    public boolean hasWalkSpeedMultiplier() {
++        return this.walkSpeedMultiplier != 1F;
++    }
++
++    public void setWalkSpeedMultiplier(final float walkSpeedMultiplier) {
++        this.walkSpeedMultiplier = walkSpeedMultiplier;
++    }
++
++    public void removeWalkSpeedMultiplier() {
++        this.walkSpeedMultiplier = 1F;
++    }
++
++    public float getFlyingSpeed() {
++        return this.flyingSpeed;
++    }
++
++    public void setFlyingSpeed(float flySpeed) {
++        this.flyingSpeed = flySpeed;
++    }
++
++    public float getWalkingSpeed() {
++        return this.walkingSpeed * this.walkSpeedMultiplier;
++    }
++
++    public void setWalkingSpeed(float walkSpeed) {
++        this.walkingSpeed = walkSpeed;
++    }
++}
+diff --git a/src/main/java/net/minecraft/world/entity/player/Player.java b/src/main/java/net/minecraft/world/entity/player/Player.java
+index b64c72ab73663620f7f7f01dd9d18dae7e94fcef..47fad822813842ce2b51a0065fa16c4e44402a39 100644
+--- a/src/main/java/net/minecraft/world/entity/player/Player.java
++++ b/src/main/java/net/minecraft/world/entity/player/Player.java
+@@ -221,6 +221,35 @@ public abstract class Player extends LivingEntity {
+     // Purpur end
+ 
+     // Skylodia start
++
++
++    private boolean slowedOnSoulSand = true;
++
++    public boolean isSlowedOnSoulSand() {
++        return slowedOnSoulSand;
++    }
++
++    public void setSlowedOnSoulSand(final boolean slowedOnSoulSand) {
++        this.slowedOnSoulSand = slowedOnSoulSand;
++    }
++
++    @Override
++    public void onSoulSandStepOn() {
++        if (this.slowedOnSoulSand) return;
++        if (this.abilities.hasWalkSpeedMultiplier()) return;
++        this.abilities.setWalkSpeedMultiplier(1.4F);
++        this.onUpdateAbilities();
++        this.getAttribute(Attributes.MOVEMENT_SPEED).setBaseValue(this.abilities.getWalkingSpeed());
++    }
++
++    @Override
++    public void onNonSoulSandStepOn() {
++        if (!this.abilities.hasWalkSpeedMultiplier()) return;
++        this.abilities.removeWalkSpeedMultiplier();
++        this.onUpdateAbilities();
++        this.getAttribute(Attributes.MOVEMENT_SPEED).setBaseValue(this.abilities.getWalkingSpeed());
++    }
++
+     @Nullable
+     private HiddenPlayer hiddenPlayer;
+ 
+@@ -951,7 +980,7 @@ public abstract class Player extends LivingEntity {
+         this.setScore(nbt.getInt("Score"));
+         this.foodData.readAdditionalSaveData(nbt);
+         this.abilities.loadSaveData(nbt);
+-        this.getAttribute(Attributes.MOVEMENT_SPEED).setBaseValue((double) this.abilities.getWalkingSpeed());
++        this.getAttribute(Attributes.MOVEMENT_SPEED).setBaseValue(this.abilities.walkingSpeed); // Skylodia - Add Temporary Multiplier
+         if (nbt.contains("EnderItems", 9)) {
+             this.enderChestInventory.fromTag(nbt.getList("EnderItems", 10));
+         }
+diff --git a/src/main/java/net/minecraft/world/level/block/Block.java b/src/main/java/net/minecraft/world/level/block/Block.java
+index 284149925440f413d23a9ec3ce704e70a74f4c08..65239853d75cabbdd3c74e4893c839b3059a7b69 100644
+--- a/src/main/java/net/minecraft/world/level/block/Block.java
++++ b/src/main/java/net/minecraft/world/level/block/Block.java
+@@ -476,7 +476,9 @@ public class Block extends BlockBehaviour implements ItemLike {
+ 
+     public void wasExploded(Level world, BlockPos pos, Explosion explosion) {}
+ 
+-    public void stepOn(Level world, BlockPos pos, BlockState state, Entity entity) {}
++    public void stepOn(Level world, BlockPos pos, BlockState state, Entity entity) {
++        entity.onNonSoulSandStepOn();
++    }
+ 
+     @Nullable
+     public BlockState getStateForPlacement(BlockPlaceContext ctx) {
+diff --git a/src/main/java/net/minecraft/world/level/block/SoulSandBlock.java b/src/main/java/net/minecraft/world/level/block/SoulSandBlock.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..be780c557fb688de2ba2b04c136f47ef32b93800
+--- /dev/null
++++ b/src/main/java/net/minecraft/world/level/block/SoulSandBlock.java
+@@ -0,0 +1,81 @@
++package net.minecraft.world.level.block;
++
++import com.mojang.serialization.MapCodec;
++import net.minecraft.core.BlockPos;
++import net.minecraft.core.Direction;
++import net.minecraft.server.level.ServerLevel;
++import net.minecraft.util.RandomSource;
++import net.minecraft.world.entity.Entity;
++import net.minecraft.world.level.BlockGetter;
++import net.minecraft.world.level.Level;
++import net.minecraft.world.level.LevelAccessor;
++import net.minecraft.world.level.block.state.BlockBehaviour;
++import net.minecraft.world.level.block.state.BlockState;
++import net.minecraft.world.level.pathfinder.PathComputationType;
++import net.minecraft.world.phys.shapes.CollisionContext;
++import net.minecraft.world.phys.shapes.Shapes;
++import net.minecraft.world.phys.shapes.VoxelShape;
++
++public class SoulSandBlock extends Block {
++    public static final MapCodec<SoulSandBlock> CODEC = simpleCodec(SoulSandBlock::new);
++    protected static final VoxelShape SHAPE = Block.box(0.0D, 0.0D, 0.0D, 16.0D, 14.0D, 16.0D);
++    private static final int BUBBLE_COLUMN_CHECK_DELAY = 20;
++
++    @Override
++    public MapCodec<SoulSandBlock> codec() {
++        return CODEC;
++    }
++
++    @Override
++    public void stepOn(final Level world, final BlockPos pos, final BlockState state, final Entity entity) {
++        entity.onSoulSandStepOn();
++    }
++
++    public SoulSandBlock(BlockBehaviour.Properties settings) {
++        super(settings);
++    }
++
++    @Override
++    public VoxelShape getCollisionShape(BlockState state, BlockGetter world, BlockPos pos, CollisionContext context) {
++        return SHAPE;
++    }
++
++    @Override
++    public VoxelShape getBlockSupportShape(BlockState state, BlockGetter world, BlockPos pos) {
++        return Shapes.block();
++    }
++
++    @Override
++    public VoxelShape getVisualShape(BlockState state, BlockGetter world, BlockPos pos, CollisionContext context) {
++        return Shapes.block();
++    }
++
++    @Override
++    public void tick(BlockState state, ServerLevel world, BlockPos pos, RandomSource random) {
++        BubbleColumnBlock.updateColumn(world, pos.above(), state);
++    }
++
++    @Override
++    public BlockState updateShape(BlockState state, Direction direction, BlockState neighborState, LevelAccessor world, BlockPos pos, BlockPos neighborPos) {
++        if (direction == Direction.UP && neighborState.is(Blocks.WATER)) {
++            world.scheduleTick(pos, this, 20);
++        }
++
++        return super.updateShape(state, direction, neighborState, world, pos, neighborPos);
++    }
++
++    @Override
++    public void onPlace(BlockState state, Level world, BlockPos pos, BlockState oldState, boolean notify) {
++        world.scheduleTick(pos, this, 20);
++    }
++
++    @Override
++    public boolean isPathfindable(BlockState state, BlockGetter world, BlockPos pos, PathComputationType type) {
++        return false;
++    }
++
++    @Override
++    public float getShadeBrightness(BlockState state, BlockGetter world, BlockPos pos) {
++        return 0.2F;
++    }
++}
+diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
+index 002b9b3983739896e04b0116e92671942ab65fcf..e6857cb48a0dacbb0e552dc32a5eae58a4014742 100644
+--- a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
++++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
+@@ -2659,7 +2659,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
+         ServerPlayer player = this.getHandle();
+         player.getAbilities().walkingSpeed = value / 2f;
+         player.onUpdateAbilities();
+-        this.getHandle().getAttribute(Attributes.MOVEMENT_SPEED).setBaseValue(player.getAbilities().walkingSpeed); // SPIGOT-5833: combination of the two in 1.16+
++        this.getHandle().getAttribute(Attributes.MOVEMENT_SPEED).setBaseValue(player.getAbilities().getWalkingSpeed()); // SPIGOT-5833: combination of the two in 1.16+
+     }
+ 
+     @Override
+@@ -3540,5 +3540,15 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
+     public void removeMultiArena() {
+         this.getHandle().removeMultiArena(false);
+     }
++
++    @Override
++    public void setSlowedOnSoulSand(boolean slowedOnSoulSand) {
++        getHandle().setSlowedOnSoulSand(slowedOnSoulSand);
++    }
++
++    @Override
++    public boolean isSlowedOnSoulSand() {
++        return getHandle().isSlowedOnSoulSand();
++    }
+     // Purpur end
+ }
