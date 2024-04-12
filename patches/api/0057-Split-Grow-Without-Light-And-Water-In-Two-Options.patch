@@ -1,0 +1,35 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Ibramsou <kasobanboui@gmail.com>
+Date: Fri, 12 Apr 2024 09:13:03 +0200
+Subject: [PATCH] Split Grow Without Light And Water In Two Options
+
+
+diff --git a/src/main/java/org/bukkit/World.java b/src/main/java/org/bukkit/World.java
+index fff8adf01552bbeeda2cd2b8df92b07361784e2e..d0fd49faa7aeed450784ac89124956152fb4f358 100644
+--- a/src/main/java/org/bukkit/World.java
++++ b/src/main/java/org/bukkit/World.java
+@@ -4389,9 +4389,22 @@ public interface World extends RegionAccessor, WorldInfo, PluginMessageRecipient
+     public Collection<GeneratedStructure> getStructures(int x, int z, @NotNull Structure structure);
+ 
+     // Skylodia start
+-    boolean isGrowWithoutLightAndWater();
++    boolean isGrowWithoutLight();
+ 
+-    void setGrowWithoutLightAndWater(boolean growWithoutLightAndWater);
++    void setGrowWithoutLight(boolean growWithoutLight);
++
++    boolean isGrowWithoutWater();
++
++    void setGrowWithoutWater(boolean growWithoutWater);
++
++    default boolean isGrowWithoutLightAndWater() {
++        return this.isGrowWithoutLight() && this.isGrowWithoutWater();
++    }
++
++    default void setGrowWithoutLightAndWater(boolean growWithoutLightAndWater) {
++        this.setGrowWithoutLight(growWithoutLightAndWater);
++        this.setGrowWithoutWater(growWithoutLightAndWater);
++    }
+     // Skylodia end
+ 
+     /**
